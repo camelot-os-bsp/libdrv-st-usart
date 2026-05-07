@@ -3,6 +3,13 @@
 `libdrv-st-usart` is a userspace STM32 USART/UART driver built for the Merlin ecosystem.
 It provides a small, label-based API to probe, initialize, use, and release USART peripherals from device-tree metadata.
 
+## building the driver
+
+```bash
+$ defconfig configs/defconfig
+$ meson setup --cross-file cm33-sentry-camelot-eabi-gcc.ini -Ddts=dts/sample.dts -Dconfig=.config -Ddts-include-dirs=$SDK_INSTALL_BASE/share/dts --reconfigure --wipe builddir
+```
+
 ## Context: Merlin Integration
 
 This driver is designed to be used with [Merlin](https://github.com/camelot-os/merlin).
