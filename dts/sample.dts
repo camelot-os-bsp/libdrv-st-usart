@@ -1,0 +1,35 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 H2Lab Development Team
+
+/dts-v1/;
+
+#include <st/u5/stm32u599.dtsi>
+#include <dt-bindings/pinctrl/stm32-pinctrl.h>
+#include <sentry.dtsi>
+
+&usart3 {
+    status = "okay";
+    pinctrl-0 = <&usart3_tx>, <&usart3_rx>;
+    sentry,owner = <0xC001F002>;
+    sentry,label = <0x103>;
+    usart,peripheral-clock = <40>; /* 40MHz APB1 clock */
+};
+
+&pinctrl {
+    /* sample usart to use */
+    usart3_tx: usart3_tx {
+        id = "usart3_tx";
+        pinmux = <&gpioc 10 STM32_DT_PIN_MODE_ALTFUNC(7)>;
+        pincfg = <STM32_OTYPER_PUSH_PULL \
+            STM32_OSPEEDR_VERY_HIGH_SPEED \
+            STM32_PUPDR_NO_PULL>;
+	};
+
+    usart3_rx: usart3_rx {
+        id = "usart3_rx";
+        pinmux = <&gpioc 11 STM32_DT_PIN_MODE_ALTFUNC(7)>;
+        pincfg = <STM32_OTYPER_PUSH_PULL \
+            STM32_OSPEEDR_VERY_HIGH_SPEED \
+            STM32_PUPDR_NO_PULL>;
+	};
+};
