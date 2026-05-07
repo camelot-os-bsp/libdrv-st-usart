@@ -3,12 +3,31 @@
 `libdrv-st-usart` is a userspace STM32 USART/UART driver built for the Merlin ecosystem.
 It provides a small, label-based API to probe, initialize, use, and release USART peripherals from device-tree metadata.
 
-## building the driver
+## building the driver
+
+To use a ready-to-use environment with a prebuilt SDK, the ghcr.io/camelot-os/camelot-builder-sdk:nightly can be used to build the driver:
 
 ```bash
-$ defconfig configs/defconfig
-$ meson setup --cross-file cm33-sentry-camelot-eabi-gcc.ini -Ddts=dts/sample.dts -Dconfig=.config -Ddts-include-dirs=$SDK_INSTALL_BASE/share/dts --reconfigure --wipe builddir
+$ docker pull ghcr.io/camelot-os/camelot-builder-sdk:nightly
+$ docker run -it ghcr.io/camelot-os/camelot-builder-sdk:nightly /bin/bash
+============================================================
+  Camelot Builder SDK
+------------------------------------------------------------
+  SDK selected    : armv8m.main
+  SDK release tag : nightly
+  SDK root        : /opt/camelot-sdk/armv8m.main
+  PKG_CONFIG_PATH : /opt/camelot-sdk/armv8m.main/lib/pkgconfig
+  DTS_INCLUDE_DIR : /opt/camelot-sdk/armv8m.main/share/dts
+  SDK_ARCH        : armv8m.main
+  SDK_INSTALL_BASE: /opt/camelot-sdk
+============================================================
+> git clone https://github.com/camelot-os-bsp/libdrv-st-usart
+> cd libdrv-st-usart
+> defconfig configs/defconfig
+> meson setup --cross-file support/meson/cm33-none-eabi-gcc.ini -Ddts=dts/sample.dts -Dconfig=.config -Ddts-include-dirs=$DTS_INCLUDE_DIR --reconfigure --wipe builddir
+> ninja -C builddir
 ```
+
 
 ## Context: Merlin Integration
 
