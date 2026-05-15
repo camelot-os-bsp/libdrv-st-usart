@@ -7,16 +7,6 @@ config USR_DRV_USART
 
 if USR_DRV_USART
 
-menu "Userspace USART library configuration"
-
-config MAX_REGISTERED_DRIVERS
-  int "Maximum number of registered drivers"
-  range 1 4
-  default 1
-  ---help---
-  This option sets the maximum number of drivers that can be registered in the system.
-  Each driver corresponds to a specific USART peripheral. Adjust this value based on the number of USART peripherals you plan to use.
-
-endmenu
+rsource 'subprojects/merlin/Kconfig'
 
 endif
