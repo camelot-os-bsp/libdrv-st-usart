@@ -7,6 +7,6 @@ config USR_DRV_USART
 
 if USR_DRV_USART
 
-rsource 'subprojects/merlin/Kconfig'
+source 'subprojects/merlin/Kconfig'
 
 endif
