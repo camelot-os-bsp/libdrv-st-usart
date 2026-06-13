@@ -45,7 +45,7 @@ jobs:
           echo "Using SDK_ROOT=${SDK_ROOT}"
           echo "Using PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
           defconfig configs/defconfig
-          meson subproject download
+          meson subprojects download
           meson setup --cross-file "${GITHUB_WORKSPACE}/support/meson/${{ matrix.cross_file }}" \
             -Dconfig=.config \
             -Ddts=dts/sample.dts \
