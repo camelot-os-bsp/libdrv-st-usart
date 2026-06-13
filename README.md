@@ -52,27 +52,30 @@ In Meson, `libdrv-st-usart` links against Merlin (`merlin_dep`) and `shield`.
 
 Header: `include/usart/usart_driver.h`
 
-- `int stm32_usart_probe(uint32_t label)`
-	Register one USART instance in Merlin from its DTS label.
+The public symbols are the Merlin-compatible aliases declared in
+`merlin/platform/api/usart.h`:
 
-- `int stm32_usart_init(uint32_t label, const struct usart_config *cfg)`
-	Map device, configure GPIOs, apply USART line configuration, enable IRQs.
+- `drv_status_t usart_probe(uint32_t label)`
+    Register one USART instance in Merlin from its DTS label.
 
-- `int stm32_usart_write(uint32_t label, const uint8_t data)`
-	Transmit one byte (polled TX).
+- `drv_status_t usart_init(uint32_t label, const struct usart_config *cfg)`
+    Map the device, configure GPIOs, apply USART line configuration, and enable IRQs.
 
-- `int stm32_usart_read(uint32_t label, uint8_t *rdbuf)`
-	Read one byte from ISR-captured RX data.
-	Returns:
-	- `0`: one byte copied to `rdbuf[0]`
-	- `1`: no byte available yet
-	- `-1`: error
+- `drv_status_t usart_write(uint32_t label, const uint8_t data)`
+    Transmit one byte in polled TX mode.
 
-- `int stm32_usart_flush(uint32_t label)`
-	Wait for transmission complete (TC flag).
+- `drv_status_t usart_read(uint32_t label, uint8_t *rdbuf)`
+    Read one byte from ISR-captured RX data.
+    Returns:
+    - `DRV_STATUS_OK`: one byte copied to `rdbuf[0]`
+    - `DRV_ERROR_AGAIN`: no byte available yet
+    - `DRV_ERROR_INVSTATE` or `DRV_ERROR_INVPARAM`: invalid driver state or parameter
 
-- `int stm32_usart_release(uint32_t label)`
-	Disable peripheral, unmap device, and free the instance slot.
+- `drv_status_t usart_flush(uint32_t label)`
+    Wait for transmission complete (TC flag).
+
+- `drv_status_t usart_release(uint32_t label)`
+    Disable the peripheral, unmap the device, and free the instance slot.
 
 ## Runtime Behavior
 

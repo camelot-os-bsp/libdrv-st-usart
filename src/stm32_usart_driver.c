@@ -33,16 +33,17 @@
 #include <inttypes.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include <merlin/buses/usart.h>
+
 #include <merlin/io.h>
+
 #include <usart/usart_driver.h>
 
 /* -------------------------------------------------------------------------
  * STM32 USART/UART driver private state structure
  * ---------------------------------------------------------------------- */
 typedef struct {
-    bool rxne_received;     /**< Flag set by ISR when a character is received */
-    uint8_t rxne_data;      /**< Character received by ISR */
+	bool rxne_received;     /**< Flag set by the ISR when a byte is received. */
+	uint8_t rxne_data;      /**< Byte captured by the ISR. */
 } stm32_usart_private_t;
 
 /* -------------------------------------------------------------------------
@@ -119,13 +120,6 @@ static int stm32_usart_isr(void *self, uint32_t IRQn);
  * fops table since the STM32 USART/UART IP is register-compatible across
  * all families.
  */
-static struct usart_bus_fops g_usart_fops = {
-    .configure = stm32_usart_fops_configure,
-    .write     = stm32_usart_fops_write,
-    .read      = stm32_usart_fops_read,
-    .flush     = stm32_usart_fops_flush,
-};
-
 static struct usart_driver g_usart_instances[STM32_USART_MAX_INSTANCES];
 static stm32_usart_private_t g_usart_private[STM32_USART_MAX_INSTANCES];
 static bool g_usart_slot_used[STM32_USART_MAX_INSTANCES];
@@ -160,16 +154,15 @@ static struct usart_driver *stm32_usart_instance_alloc(void)
             priv->rxne_received = false;
             priv->rxne_data = 0U;
 
-            drv->fops                       = &g_usart_fops;
-            drv->platform.devh              = 0;
-            drv->platform.label             = 0UL;
-            drv->platform.devinfo           = NULL;
-            drv->platform.name              = "stm32 usart/uart driver";
-            drv->platform.compatible        = "st,stm32-usart";
-            drv->platform.driver_fops       = &g_usart_fops;
+            drv->platform.devh = 0;
+            drv->platform.label = 0UL;
+            drv->platform.devinfo = NULL;
+            drv->platform.name = "stm32 usart/uart driver";
+            drv->platform.compatible = "st,stm32-usart";
             drv->platform.platform_fops.isr = stm32_usart_isr;
-            drv->platform.type              = DEVICE_TYPE_USART;
-            drv->private_data               = priv;
+            drv->platform.type = DEVICE_TYPE_USART;
+            drv->platform.private_data = priv;
+            drv->private_data = priv;
 
             g_usart_slot_used[i] = true;
             return drv;
@@ -188,6 +181,11 @@ static void stm32_usart_instance_free(struct usart_driver *drv)
         if (&g_usart_instances[i] == drv) {
             g_usart_private[i].rxne_received = false;
             g_usart_private[i].rxne_data = 0U;
+            drv->platform.platform_fops.isr = NULL;
+            drv->platform.private_data = NULL;
+            drv->platform.devh = 0;
+            drv->platform.label = 0UL;
+            drv->platform.devinfo = NULL;
             drv->private_data = NULL;
             g_usart_slot_used[i] = false;
             return;
@@ -237,7 +235,9 @@ static inline void usart_write32(const struct usart_driver *drv,
  */
 static inline bool usart_is_ready(const struct usart_driver *drv)
 {
-    return (drv->platform.devh != 0) && (drv->platform.devinfo != NULL);
+    return (drv->platform.devh != 0) &&
+           (drv->platform.devinfo != NULL) &&
+           (drv->private_data != NULL);
 }
 
 /**
@@ -508,10 +508,11 @@ static int stm32_usart_fops_write(struct usart_driver *self,
 static int stm32_usart_fops_read(struct usart_driver *self,
                                  uint8_t *rdbuf, size_t len)
 {
-    /* read is in interrupt mode, the ISR is responsible for loading locally in
-     * driver private data the received char. this fops implementation is
-     * not used.
-     */
+    (void)self;
+    (void)rdbuf;
+    (void)len;
+
+    /* RX is handled directly by the public API; this helper remains a stub. */
     return 0;
 }
 
@@ -595,144 +596,172 @@ static int stm32_usart_isr(void *self, uint32_t IRQn)
 /**
  * @brief Register a USART instance in Merlin.
  * @param label DTS label of the target USART peripheral.
- * @return 0 on success, -1 on allocation or registration failure.
+ * @return DRV_STATUS_OK on success.
+ * @return DRV_ERROR_INVSTATE if no free instance slot is available.
+ * @return DRV_ERROR_CONFIGURATION if the DTS label cannot be resolved.
+ * @return DRV_ERROR_NOTREGISTERED if Merlin rejects the registration.
  */
-int stm32_usart_probe(uint32_t label)
+drv_status_t stm32_usart_probe(uint32_t label)
 {
     struct usart_driver *drv = stm32_usart_instance_alloc();
 
     if (drv == NULL) {
-        return -1;
+        return DRV_ERROR_INVSTATE;
     }
 
     if (merlin_platform_driver_register(&drv->platform, label) != STATUS_OK) {
         stm32_usart_instance_free(drv);
-        return -1;
+        return DRV_ERROR_CONFIGURATION;
     }
 
-    return 0;
+    return DRV_STATUS_OK;
 }
 
 /**
  * @brief Map and configure a registered USART instance.
  * @param label DTS label of the target USART peripheral.
  * @param cfg Line configuration to apply.
- * @return 0 on success, -1 on failure.
+ * @return DRV_STATUS_OK on success.
+ * @return DRV_ERROR_INVSTATE if the instance is not registered.
+ * @return DRV_ERROR_INVPARAM if cfg is NULL.
+ * @return DRV_ERROR_CONFIGURATION if mapping, GPIO setup, or line setup fails.
  */
-int stm32_usart_init(uint32_t label, const struct usart_config *cfg)
+drv_status_t stm32_usart_init(uint32_t label, const struct usart_config *cfg)
 {
     struct usart_driver *drv = stm32_usart_instance_get(label);
 
     if (drv == NULL || cfg == NULL) {
-        return -1;
+        return (drv == NULL) ? DRV_ERROR_INVSTATE : DRV_ERROR_INVPARAM;
     }
 
     if (merlin_platform_driver_map(&drv->platform) != STATUS_OK) {
-        return -1;
+        return DRV_ERROR_CONFIGURATION;
     }
 
     if (merlin_platform_driver_configure_gpio(&drv->platform) != STATUS_OK) {
-        return -1;
+        return DRV_ERROR_CONFIGURATION;
     }
 
-    return stm32_usart_fops_configure(drv, cfg);
+    if (stm32_usart_fops_configure(drv, cfg) != 0) {
+        return DRV_ERROR_CONFIGURATION;
+    }
+
+    return DRV_STATUS_OK;
 }
 
 /**
- * @brief Public write API for a specific USART instance.
+ * @brief Transmit one byte on a specific USART instance.
  * @param label DTS label of the target USART peripheral.
- * @param wrbuf Buffer to transmit.
- * @param len Number of bytes to transmit.
- * @return 0 on success, -1 on failure.
+ * @param data Byte to transmit.
+ * @return DRV_STATUS_OK on success.
+ * @return DRV_ERROR_INVSTATE if the instance is not initialised.
+ * @return DRV_ERROR_AGAIN if the transmitter is temporarily busy.
  */
-int stm32_usart_write(uint32_t label, const uint8_t data)
+drv_status_t stm32_usart_write(uint32_t label, const uint8_t data)
 {
     struct usart_driver *drv = stm32_usart_instance_get(label);
 
     if (drv == NULL) {
-        return -1;
+        return DRV_ERROR_INVSTATE;
     }
 
-    return stm32_usart_fops_write(drv, &data, 1);
+    if (stm32_usart_fops_write(drv, &data, 1U) != 0) {
+        return DRV_ERROR_AGAIN;
+    }
+
+    return DRV_STATUS_OK;
 }
 
 /**
- * @brief Public read API for a specific USART instance.
- *
- * if a character is available from the RX ISR, it is copied to the provided buffer
- * and the function returns 0. If no character is available yet, the function returns 1.
+ * @brief Read one byte from a specific USART instance.
  *
  * @param label DTS label of the target USART peripheral.
  * @param rdbuf Destination buffer.
- * @param len Number of bytes to read.
- * @return 0 on success, -1 on failure.
+ * @return DRV_STATUS_OK on success.
+ * @return DRV_ERROR_INVSTATE if the instance is not initialised.
+ * @return DRV_ERROR_INVPARAM if rdbuf is NULL.
+ * @return DRV_ERROR_AGAIN if no byte is currently available.
  */
-int stm32_usart_read(uint32_t label, uint8_t *rdbuf)
+drv_status_t stm32_usart_read(uint32_t label, uint8_t *rdbuf)
 {
     struct usart_driver *drv = stm32_usart_instance_get(label);
+    stm32_usart_private_t *priv;
+
     if (drv == NULL) {
-        return -1;
+        return DRV_ERROR_INVSTATE;
     }
-    stm32_usart_private_t *priv = (stm32_usart_private_t *)drv->private_data;
-    if (priv == NULL) {
-        return -1;
-    }
+
     if (rdbuf == NULL) {
-        return -1;
+        return DRV_ERROR_INVPARAM;
     }
+
+    priv = (stm32_usart_private_t *)drv->private_data;
+    if (priv == NULL) {
+        return DRV_ERROR_INVSTATE;
+    }
+
     if (priv->rxne_received) {
         rdbuf[0] = priv->rxne_data;
         priv->rxne_received = false;
-        return 0;
+        return DRV_STATUS_OK;
     }
-    return 1;
+
+    return DRV_ERROR_AGAIN;
 }
 
 /**
- * @brief Public flush API for a specific USART instance.
+ * @brief Wait for pending TX data to leave the peripheral.
  * @param label DTS label of the target USART peripheral.
- * @return 0 on success, -1 on failure.
+ * @return DRV_STATUS_OK on success.
+ * @return DRV_ERROR_INVSTATE if the instance is not initialised.
+ * @return DRV_ERROR_TIMEOUT if the transmission complete flag never asserts.
  */
-int stm32_usart_flush(uint32_t label)
+drv_status_t stm32_usart_flush(uint32_t label)
 {
     struct usart_driver *drv = stm32_usart_instance_get(label);
 
     if (drv == NULL) {
-        return -1;
+        return DRV_ERROR_INVSTATE;
     }
 
-    return stm32_usart_fops_flush(drv);
+    if (stm32_usart_fops_flush(drv) != 0) {
+        return DRV_ERROR_TIMEOUT;
+    }
+
+    return DRV_STATUS_OK;
 }
 
 
 /**
  * @brief Disable and unmap a USART instance, then free its slot.
  * @param label DTS label of the target USART peripheral.
- * @return 0 on success, -1 on failure.
+ * @return DRV_STATUS_OK on success.
+ * @return DRV_ERROR_INVSTATE if the instance is not initialised.
+ * @return DRV_ERROR_CONFIGURATION if unmapping fails.
  */
-int stm32_usart_release(uint32_t label)
+drv_status_t stm32_usart_release(uint32_t label)
 {
     struct usart_driver *drv = stm32_usart_instance_get(label);
 
     if (drv == NULL) {
-        return -1;
+        return DRV_ERROR_INVSTATE;
     }
 
     stm32_usart_disable(drv);
 
     if (merlin_platform_driver_unmap(&drv->platform) != STATUS_OK) {
-        return -1;
+        return DRV_ERROR_CONFIGURATION;
     }
 
     stm32_usart_instance_free(drv);
 
-    return 0;
+    return DRV_STATUS_OK;
 }
 
 /* Aliases for the exported API functions */
-int usart_probe(uint32_t label) __attribute__((alias("stm32_usart_probe")));
-int usart_init(uint32_t label, const struct usart_config *cfg) __attribute__((alias("stm32_usart_init")));
-int usart_write(uint32_t label, const uint8_t data) __attribute__((alias("stm32_usart_write")));
-int usart_read(uint32_t label, uint8_t *rdbuf) __attribute__((alias("stm32_usart_read")));
-int usart_flush(uint32_t label) __attribute__((alias("stm32_usart_flush")));
-int usart_release(uint32_t label) __attribute__((alias("stm32_usart_release")));
+drv_status_t usart_probe(uint32_t label) __attribute__((alias("stm32_usart_probe")));
+drv_status_t usart_init(uint32_t label, const struct usart_config *cfg) __attribute__((alias("stm32_usart_init")));
+drv_status_t usart_write(uint32_t label, const uint8_t data) __attribute__((alias("stm32_usart_write")));
+drv_status_t usart_read(uint32_t label, uint8_t *rdbuf) __attribute__((alias("stm32_usart_read")));
+drv_status_t usart_flush(uint32_t label) __attribute__((alias("stm32_usart_flush")));
+drv_status_t usart_release(uint32_t label) __attribute__((alias("stm32_usart_release")));

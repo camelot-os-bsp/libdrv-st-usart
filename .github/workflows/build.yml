@@ -1,0 +1,54 @@
+name: Build
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (${{ matrix.sdk_name }})
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/camelot-os/camelot-builder-sdk:nightly
+    env:
+      SDK_ROOT: ${{ matrix.sdk_root }}
+      PKG_CONFIG_PATH: ${{ matrix.sdk_root }}/lib/pkgconfig
+      PKG_CONFIG_FILE: ${{ matrix.sdk_root }}/lib/pkgconfig
+      DTS_INCLUDE_DIR: ${{ matrix.sdk_root }}/share/dts
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sdk_name: armv8m.mainline
+            sdk_root: /opt/camelot-sdk/armv8m.main
+            cross_file: cm33-none-eabi-gcc.ini
+            build_dir: builddir
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          set-safe-directory: true
+      - name: Validation build
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}"
+          git config --global --add safe.directory "*"
+          rm -rf "${{ matrix.build_dir }}"
+          ln -sfn /opt/arm/arm-none-eabi arm-none-eabi
+          echo "Using SDK_ROOT=${SDK_ROOT}"
+          echo "Using PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
+          defconfig configs/defconfig
+          meson setup --cross-file "${GITHUB_WORKSPACE}/support/meson/${{ matrix.cross_file }}" \
+            -Dconfig=.config \
+            -Ddts=dts/sample.dts \
+            -Ddts-include-dirs="${DTS_INCLUDE_DIR}" \
+            "${{ matrix.build_dir }}"
+          ninja -C "${{ matrix.build_dir }}"
+        shell: bash
